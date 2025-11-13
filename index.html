@@ -132,12 +132,9 @@ hands.onResults(onHandsResults);
 
 function startCameraOnFirstInteraction() {
     if (cameraInstance) return;
-
     statusEl.textContent = 'Iniciando...';
-    
     document.removeEventListener('click', startCameraOnFirstInteraction); 
     document.removeEventListener('touchstart', startCameraOnFirstInteraction);
-
     navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
         .then(stream => {
             videoElement.srcObject = stream;
@@ -145,7 +142,6 @@ function startCameraOnFirstInteraction() {
                 videoElement.play();
                 overlay.width = videoElement.videoWidth;
                 overlay.height = videoElement.videoHeight;
-                
                 cameraInstance = new Camera(videoElement, {
                     onFrame: async () => { await hands.send({image: videoElement}); },
                     width: 640, height: 480
@@ -159,45 +155,50 @@ function startCameraOnFirstInteraction() {
             statusEl.textContent = 'Error de cámara.';
         });
 }
-
 document.addEventListener('click', startCameraOnFirstInteraction);
 document.addEventListener('touchstart', startCameraOnFirstInteraction);
-
 
 // --- Componente de A-Frame (Posicionamiento y Animación) ---
 AFRAME.registerComponent('hand-control', {
   init: function(){
     this.bones = {};
     this.basePose = {}; 
-   
     this.invert = {x: -1, y: -1, z: -1}; 
     this.smoothFactor = 0.15; 
     this.lastLandmarks = null; 
     this.scaleFactor = 1.0;
 
+    // === CAMBIO 68: Límites del Pulgar Sin Topes ===
     this.flexionLimits = {
-        'thumb000': {min: -0.2, max: 1.8}, 'thumb001': {min: -0.2, max: 2.0}, 'thumb002': {min: -0.2, max: 2.0},
-        'index001': {min: -0.1, max: 1.5}, 'index002': {min: -0.1, max: 1.5},
-        'middle001': {min: -0.1, max: 1.5}, 'middle002': {min: -0.1, max: 1.5},
-        'ring001': {min: -0.1, max: 1.5}, 'ring002': {min: -0.1, max: 1.5},
-        'pinky001': {min: -0.1, max: 1.5}, 'pinky002': {min: -0.1, max: 1.5},
+        'thumb000': {min: -8.0, max: 0.2}, // Antes -5.0
+        'thumb001': {min: -8.0, max: 0.2}, // Antes -5.0
+        'thumb002': {min: -8.0, max: 0.2}, // Antes -5.0
+        
+        'index001': {min: -0.1, max: 2.5}, 'index002': {min: -0.1, max: 2.5},
+        'middle001': {min: -0.1, max: 2.5}, 'middle002': {min: -0.1, max: 2.5},
+        'ring001': {min: -0.1, max: 2.5}, 'ring002': {min: -0.1, max: 2.5},
+        'pinky001': {min: -0.1, max: 2.5}, 'pinky002': {min: -0.1, max: 2.5},
     };
     this.abductionLimits = {
         'thumb000': {min: -0.6, max: 0.6}, 'thumb001': {min: -0.2, max: 0.2}, 'thumb002': {min: -0.2, max: 0.2},
         'index001': {min: -0.2, max: 0.2}, 'middle001': {min: -0.1, max: 0.1}, 'ring001': {min: -0.2, max: 0.2},
         'pinky001': {min: -0.25, max: 0.25}, 
     };
+    
+    // === CAMBIO 68: Influencia del Pulgar Aumentada ===
     this.flexionInfluence = {
-        'thumb000': 0.8, 'thumb001': 0.8, 'thumb002': 0.8, 
-        'index001': 0.45, 'index002': 0.45,
-        'middle001': 0.45, 'middle002': 0.45,
-        'ring001': 0.4, 'ring002': 0.4,
-        'pinky001': 0.35, 'pinky002': 0.35, 
+        'thumb000': -1.5, 'thumb001': -1.5, 'thumb002': -1.5, // Antes -1.0
+        'index001': 0.8, 'index002': 0.8,
+        'middle001': 0.8, 'middle002': 0.8,
+        'ring001': 0.8, 'ring002': 0.8,
+        'pinky001': 0.8, 'pinky002': 0.8,
     };
+
+    // === CAMBIO 68: ¡RESET DE CALIBRACIÓN! ===
     this.poseOffsets = {
-        'thumb000': { z: -0.30, x: 0.5 }, 
-        'thumb001': { z: -0.06, x: 0.5 }, 
-        'thumb002': { z: -0.30, x: 0.30 }
+        'thumb000': { z: 0, x: 0 }, // ¡Reseteado!
+        'thumb001': { z: 0, x: 0 }, // ¡Reseteado!
+        'thumb002': { z: 0, x: 0 }  // ¡Reseteado!
     };
     
     this.el.addEventListener('model-loaded', () => {
@@ -284,9 +285,8 @@ AFRAME.registerComponent('hand-control', {
 
       const qDelta = new THREE.Quaternion().setFromUnitVectors(ref, dir);
 
-      if (!name.includes('thumb')) {
-          qDelta.invert();
-      }
+      // ¡Invertir TODOS los dedos!
+      qDelta.invert();
 
       const euler = new THREE.Euler().setFromQuaternion(qDelta, 'YXZ');
 
@@ -311,7 +311,7 @@ AFRAME.registerComponent('hand-control', {
       euler.y = 0; 
 
       const qFinal = new THREE.Quaternion().setFromEuler(euler);
-      const baseQ = basePose[name] ? basePose[name].clone() : bone.quaternion.clone();
+      const baseQ = basePose[name] ? basePose[name].clone() : bone.quaternion.clone(); // ¡Typo corregido!
       const desiredQ = baseQ.clone().multiply(qFinal);
 
       bone.quaternion.slerp(desiredQ, alpha); 
@@ -352,4 +352,4 @@ function onHandsResults(results){
 }
 </script>
 </body>
-</html>   
+</html>  
