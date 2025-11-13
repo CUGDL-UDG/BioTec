@@ -2,34 +2,91 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Hand Tracking - Solución FINAL: Estabilidad en Posición</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Hand Tracking - Con Logo</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.158.0/three.min.js"></script>  
+  
   <style>
-    body { margin:0; font-family: system-ui, Arial; background:#000; }
-    #videoElement { position: absolute; visibility: hidden; z-index: -1; }
-    #overlayCanvas { position: absolute; left: 0; top: 0; z-index: 10; display: block !important; }
-    #ui { 
-      position: absolute; right: 8px; top: 8px; z-index: 20; 
-      background: rgba(255,255,255,0.9); padding:8px; border-radius:6px; 
-      font-size: 14px;
+    body { 
+      margin:0; 
+      font-family: system-ui, Arial; 
+      background:#000; 
+      overflow: hidden; 
     }
-    a-scene { height:100vh; width:100vw; display:block; }
+    
+    a-scene { 
+      position: absolute;
+      top: 0; left: 0;
+      height: 100vh; 
+      width: 100vw; 
+      z-index: 1; /* Fondo */
+    }
+    
+    #videoElement { 
+        display: none; 
+    }
+
+    /* Contenedor para la cámara y el logo */
+    #top-left-elements {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        display: flex; 
+        align-items: center; 
+        gap: 10px; 
+        background: rgba(0,0,0,0.7); 
+        padding: 10px; 
+        border-radius: 8px; 
+    }
+
+    #overlayCanvas { 
+      width: 200px;  
+      height: 150px; 
+      display: block !important; 
+      border: 2px solid rgba(255,255,255,0.5); 
+      border-radius: 8px; 
+      object-fit: cover; 
+    }
+
+    #teamLogo {
+        width: 100px; 
+        height: auto; 
+        border-radius: 8px; 
+        z-index: 11; 
+    }
+
+    /* UI que solo contiene el estado */
+    #ui { 
+      position: absolute; 
+      bottom: 0; left: 0; right: 0; 
+      z-index: 20; 
+      background: rgba(0,0,0,0.7); 
+      color: white; 
+      padding: 10px; 
+      font-size: 14px;
+      display: flex; 
+      justify-content: center; 
+      align-items: center;
+      min-height: 40px; 
+    }
+    
   </style>
 </head>
 <body>
   <video id="videoElement" playsinline></video>
-  <canvas id="overlayCanvas"></canvas>
+  
+  <div id="top-left-elements">
+    <canvas id="overlayCanvas"></canvas>
+    
+    <img id="teamLogo" src="biotec.png" alt="Logo del equipo Biotec">
+  </div>
 
   <div id="ui">
     <div>Estado: <span id="status">Inactivo</span></div>
-    <div style="margin-top:6px"><button id="startBtn">Iniciar Cámara</button></div>
-    <hr style="margin: 8px 0;">
-    <p>Ajuste Fino de Flexión (Prueba con la tecla 2 o 3 si dedos se doblan mal):</p>
-    <div style="font-weight: bold;">Vector Ref.: <span id="ref-vector">Y+ (0, 1, 0)</span></div>
   </div>
 
   <a-scene background="color: #000"> 
@@ -56,57 +113,56 @@ const videoElement = document.getElementById('videoElement');
 const overlay = document.getElementById('overlayCanvas');
 const overlayCtx = overlay.getContext('2d');
 const statusEl = document.getElementById('status');
-const startBtn = document.getElementById('startBtn');
 const handEntity = document.getElementById('handEntity');
-const refVectorEl = document.getElementById('ref-vector');
 
 let cameraInstance = null; 
 let refVectorOption = 0; 
+
 const hands = new Hands({
   locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
 });
+
 hands.setOptions({
-  maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6
+  maxNumHands: 1, 
+  modelComplexity: 0, 
+  minDetectionConfidence: 0.6, 
+  minTrackingConfidence: 0.6
 });
 hands.onResults(onHandsResults);
 
-startBtn.addEventListener('click', async () => {
-  if (cameraInstance) return;
-  statusEl.textContent = 'Iniciando...';
- 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-    videoElement.srcObject = stream;
-   
-    videoElement.onloadedmetadata = () => {
-      videoElement.play();
-      overlay.width = videoElement.videoWidth;
-      overlay.height = videoElement.videoHeight;
-      cameraInstance = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({image: videoElement}); },
-        width: 640, height: 480
-      });
-      cameraInstance.start();
-      statusEl.textContent = '¡Activo! (Mueve la mano)';
-      startBtn.style.display = 'none';
-      setupRefVectorControls();
-    };
-  } catch (error) {
-    console.error("Error al acceder a la cámara:", error);
-    statusEl.textContent = 'Error de cámara.';
-  }
-});
+function startCameraOnFirstInteraction() {
+    if (cameraInstance) return;
 
-function setupRefVectorControls() {
-    document.addEventListener('keydown', (e) => {
-        if (e.key === '1') refVectorOption = 0;
-        else if (e.key === '2') refVectorOption = 1;
-        else if (e.key === '3') refVectorOption = 2;
-       
-        const vectors = ['Y+ (0, 1, 0)', 'X+ (1, 0, 0)', 'Z+ (0, 0, 1)'];
-        refVectorEl.textContent = vectors[refVectorOption];
-    });
+    statusEl.textContent = 'Iniciando...';
+    
+    document.removeEventListener('click', startCameraOnFirstInteraction); 
+    document.removeEventListener('touchstart', startCameraOnFirstInteraction);
+
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+        .then(stream => {
+            videoElement.srcObject = stream;
+            videoElement.onloadedmetadata = () => {
+                videoElement.play();
+                overlay.width = videoElement.videoWidth;
+                overlay.height = videoElement.videoHeight;
+                
+                cameraInstance = new Camera(videoElement, {
+                    onFrame: async () => { await hands.send({image: videoElement}); },
+                    width: 640, height: 480
+                });
+                cameraInstance.start();
+                statusEl.textContent = '¡Activo! (Mueve la mano)';
+            };
+        })
+        .catch(error => {
+            console.error("Error al acceder a la cámara:", error);
+            statusEl.textContent = 'Error de cámara.';
+        });
 }
+
+document.addEventListener('click', startCameraOnFirstInteraction);
+document.addEventListener('touchstart', startCameraOnFirstInteraction);
+
 
 // --- Componente de A-Frame (Posicionamiento y Animación) ---
 AFRAME.registerComponent('hand-control', {
@@ -119,9 +175,8 @@ AFRAME.registerComponent('hand-control', {
     this.lastLandmarks = null; 
     this.scaleFactor = 1.0;
 
-    // Mapas de Configuración (Estables)
     this.flexionLimits = {
-        'thumb000': {min: -0.1, max: 1.0}, 'thumb001': {min: -0.1, max: 1.1}, 'thumb002': {min: -0.1, max: 1.3},
+        'thumb000': {min: -0.2, max: 1.8}, 'thumb001': {min: -0.2, max: 2.0}, 'thumb002': {min: -0.2, max: 2.0},
         'index001': {min: -0.1, max: 1.5}, 'index002': {min: -0.1, max: 1.5},
         'middle001': {min: -0.1, max: 1.5}, 'middle002': {min: -0.1, max: 1.5},
         'ring001': {min: -0.1, max: 1.5}, 'ring002': {min: -0.1, max: 1.5},
@@ -133,25 +188,18 @@ AFRAME.registerComponent('hand-control', {
         'pinky001': {min: -0.25, max: 0.25}, 
     };
     this.flexionInfluence = {
-        'thumb000': 0.6, 'thumb001': 0.6, 'thumb002': 0.6, 
+        'thumb000': 0.8, 'thumb001': 0.8, 'thumb002': 0.8, 
         'index001': 0.45, 'index002': 0.45,
         'middle001': 0.45, 'middle002': 0.45,
         'ring001': 0.4, 'ring002': 0.4,
-        'pinky001': 0.45, 'pinky002': 0.45, 
+        'pinky001': 0.35, 'pinky002': 0.35, 
     };
-
-    // === CAMBIO 36: Offsets del Pulgar (Punto Medio Fuerte) ===
-    // 'z' es flexión ("abajo"), 'x' es abducción ("curvo")
-    // Tus valores (-0.35) eran muy débiles. Mis valores (-0.8) eran muy fuertes.
-    // ¡Probemos un punto medio fuerte para enderezarlo!
     this.poseOffsets = {
-        'thumb000': { z: -0.6, x: -0.3 }, 
-        'thumb001': { z: -0.5, x: -0.2 }, 
-        'thumb002': { z: -0.4, x: -0.1 }
+        'thumb000': { z: -0.30, x: 0.5 }, 
+        'thumb001': { z: -0.06, x: 0.5 }, 
+        'thumb002': { z: -0.30, x: 0.30 }
     };
-    // === FIN DEL CAMBIO 36 ===
-
-
+    
     this.el.addEventListener('model-loaded', () => {
       const obj = this.el.getObject3D('mesh');
       if (!obj) { console.warn('No mesh'); return; }
@@ -186,8 +234,6 @@ AFRAME.registerComponent('hand-control', {
   },
 
   getRefVector: function() {
-      if (refVectorOption === 1) return new THREE.Vector3(1, 0, 0); 
-      if (refVectorOption === 2) return new THREE.Vector3(0, 0, 1); 
       return new THREE.Vector3(0, 1, 0); 
   },
 
@@ -205,18 +251,23 @@ AFRAME.registerComponent('hand-control', {
    
     const alpha = Math.max(0.02, smoothFactor); 
 
-    // 1. Muñeca (Bone)
+    // === LÓGICA DE MUÑECA SIMPLE (ESTÁTICA) ===
     if (bones['Bone'] && landmarks[0] && landmarks[9]) {
       const v0 = new THREE.Vector3(landmarks[0].x * invert.x, landmarks[0].y * invert.y, landmarks[0].z * invert.z);
       const v9 = new THREE.Vector3(landmarks[9].x * invert.x, landmarks[9].y * invert.y, landmarks[9].z * invert.z);
       const dirW = new THREE.Vector3().subVectors(v9, v0).normalize();
+
       const qDeltaW = new THREE.Quaternion().setFromUnitVectors(ref, dirW);
-      const influenceW = Math.min(1, scaleFactor * 0.25); 
+      const influenceW = Math.min(1, scaleFactor * 0.1); 
       const qApplyW = new THREE.Quaternion().slerpQuaternions(new THREE.Quaternion(), qDeltaW, influenceW);
+
       const base = basePose['Bone'] || bones['Bone'].quaternion.clone();
       let desired = base.clone().multiply(qApplyW);
+
       bones['Bone'].quaternion.slerp(desired, alpha);
     }
+    // === FIN DE LÓGICA DE MUÑECA ===
+
 
     // 2. Dedos (Lógica de animación)
     for (const [name, a, b] of fingerMap) {
@@ -301,4 +352,4 @@ function onHandsResults(results){
 }
 </script>
 </body>
-</html>  
+</html>   
